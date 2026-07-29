@@ -1,10 +1,10 @@
-name: Clone Repository
+name: GitHub Repository Replica
 
 on:
   workflow_dispatch:
     inputs:
       github_token:
-        description: "GitHub Personal Access Token (PAT)"
+        description: "GitHub Personal Access Token"
         required: true
         type: string
 
@@ -23,36 +23,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
       - name: Configure Git
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
+      - name: Extract Source Repo Details
+        id: repo
+        run: |
+          REPO_PATH=$(echo "${{ github.event.inputs.source_repo_url }}" | sed 's#https://github.com/##' | sed 's#.git##')
+          echo "repo_path=$REPO_PATH" >> $GITHUB_OUTPUT
+
+      - name: Authenticate GitHub CLI
+        env:
+          GH_TOKEN: ${{ github.event.inputs.github_token }}
+        run: |
+          gh auth status
+
       - name: Create Target Repository
         env:
           GH_TOKEN: ${{ github.event.inputs.github_token }}
         run: |
-          gh repo create "${{ github.event.inputs.target_repo_name }}" \
-            --private
 
-      - name: Mirror Clone Source Repository
-        run: |
-          git clone --mirror "${{ github.event.inputs.source_repo_url }}" repo.git
-
-      - name: Push Complete Repository
-        env:
-          GH_TOKEN: ${{ github.event.inputs.github_token }}
-        run: |
-          cd repo.git
-
-          TARGET_URL="https://${GH_TOKEN}@github.com/${{ github.repository_owner }}/${{ github.event.inputs.target_repo_name }}.git"
-
-          git remote set-url origin "$TARGET_URL"
-
-          git push --mirror
-
-      - name: Summary
-        run: |
-          echo "Repository cloned successfully"
-          echo "Source Repository: ${{ github.event.inputs.source_repo_url }}"
-          echo "Target Repository: ${{ github.event.inputs.target_repo_name }}"
+   
