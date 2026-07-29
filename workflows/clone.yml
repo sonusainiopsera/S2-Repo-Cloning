@@ -1,0 +1,50 @@
+name: Clone Existing Repository
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_repo_url:
+        description: "Source Repository URL to Clone"
+        required: true
+        type: string
+
+      target_repo_name:
+        description: "Target Repository Name"
+        required: true
+        type: string
+
+      branch_count:
+        description: "Number of Branches to Clone"
+        required: true
+        type: string
+
+      branch_names:
+        description: "Branch Names to Clone (comma-separated)"
+        required: true
+        type: string
+
+jobs:
+  clone-repository:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Display Inputs
+        run: |
+          echo "Source Repo: ${{ github.event.inputs.source_repo_url }}"
+          echo "Target Repo: ${{ github.event.inputs.target_repo_name }}"
+          echo "Branch Count: ${{ github.event.inputs.branch_count }}"
+          echo "Branches: ${{ github.event.inputs.branch_names }}"
+
+      - name: Clone Source Repository
+        run: |
+          git clone --mirror "${{ github.event.inputs.source_repo_url }}" source-repo.git
+
+      - name: Show Selected Branches
+        run: |
+          echo "Selected branches:"
+          echo "${{ github.event.inputs.branch_names }}" | tr ',' '\n'
+
+      - name: Repository Cloned Successfully
+        run: |
+          echo "Repository cloned successfully."
+          echo "No source repository settings, protection rules, or configurations were modified."
