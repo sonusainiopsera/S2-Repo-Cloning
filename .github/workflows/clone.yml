@@ -23,50 +23,47 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install jq
+
+      - name: Install GitHub CLI
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
+          gh --version
 
       - name: Configure Git
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-      - name: Get Authenticated GitHub User
-        id: github_user
-        env:
-          GH_TOKEN: ${{ github.event.inputs.github_token }}
-        run: |
-          USERNAME=$(gh api user --jq '.login')
-          echo "username=$USERNAME" >> "$GITHUB_OUTPUT"
-
-      - name: Extract Source Repository Details
-        id: repo
-        run: |
-          REPO_PATH=$(echo "${{ github.event.inputs.source_repo_url }}" \
-            | sed 's#https://github.com/##' \
-            | sed 's#.git##')
-
-          echo "repo_path=$REPO_PATH" >> "$GITHUB_OUTPUT"
-
-      - name: Verify Authentication
+      - name: Authenticate GitHub
         env:
           GH_TOKEN: ${{ github.event.inputs.github_token }}
         run: |
           gh auth status
 
+      - name: Get Authenticated User
+        id: github_user
+        env:
+          GH_TOKEN: ${{ github.event.inputs.github_token }}
+        run: |
+          USERNAME=$(gh api user --jq '.login')
+          echo "username=$USERNAME" >> $GITHUB_OUTPUT
+
+          echo "Authenticated User: $USERNAME"
+
       - name: Create Target Repository
         env:
           GH_TOKEN: ${{ github.event.inputs.github_token }}
         run: |
+
           gh repo create \
             "${{ steps.github_user.outputs.username }}/${{ github.event.inputs.target_repo_name }}" \
             --private
 
       - name: Clone Source Repository
         run: |
-          git clone --bare "${{ github.event.inputs.source_repo_url }}" repo.git
+
+          git clone --bare \
+            "${{ github.event.inputs.source_repo_url }}" \
+            repo.git
 
       - name: Push All Branches
         env:
@@ -88,25 +85,41 @@ jobs:
 
           cd repo.git
 
+          TARGET_URL="https://${GH_TOKEN}@github.com/${{ steps.github_user.outputs.username }}/${{ github.event.inputs.target_repo_name }}.git"
+
+          if ! git remote | grep -q target; then
+            git remote add target "$TARGET_URL"
+          fi
+
           git push target --tags
 
-      - name: Copy Repository Settings
+      - name: Verify Repository
         env:
           GH_TOKEN: ${{ github.event.inputs.github_token }}
         run: |
 
-          SOURCE="${{ steps.repo.outputs.repo_path }}"
-          TARGET="${{ steps.github_user.outputs.username }}/${{ github.event.inputs.target_repo_name }}"
+          echo ""
+          echo "====================================="
+          echo "Repository Clone Completed"
+          echo "====================================="
 
-          gh api repos/$SOURCE > repo.json
+          echo "Source Repository:"
+          echo "${{ github.event.inputs.source_repo_url }}"
 
-          gh api \
-            --method PATCH \
-            repos/$TARGET \
-            -f description="$(jq -r '.description // ""' repo.json)" \
-            -f homepage="$(jq -r '.homepage // ""' repo.json)" \
-            -F has_issues=$(jq '.has_issues' repo.json) \
-            -F has_projects=$(jq '.has_projects' repo.json) \
-            -F has_wiki=$(jq '.has_wiki' repo.json) \
-            -F allow_merge_commit=$(jq '.allow_merge_commit' repo.json) \
-            -F allow_squash_merge=$(jq '.allow_squash_
+          echo ""
+          echo "Target Repository:"
+
+          echo "https://github.com/${{ steps.github_user.outputs.username }}/${{ github.event.inputs.target_repo_name }}"
+
+      - name: List Branches
+        env:
+          GH_TOKEN: ${{ github.event.inputs.github_token }}
+        run: |
+
+          gh repo view \
+            "${{ steps.github_user.outputs.username }}/${{ github.event.inputs.target_repo_name }}" \
+            --json url
+
+      - name: Success
+        run: |
+          echo "Repository replication completed successfully."
