@@ -1,50 +1,59 @@
-name: Clone Existing Repository
+name: Clone Repository
 
 on:
   workflow_dispatch:
     inputs:
       source_repo_url:
-        description: "Source Repository URL to Clone"
+        description: "Source Repository URL"
         required: true
-        type: string
 
       target_repo_name:
         description: "Target Repository Name"
         required: true
-        type: string
-
-      branch_count:
-        description: "Number of Branches to Clone"
-        required: true
-        type: string
 
       branch_names:
-        description: "Branch Names to Clone (comma-separated)"
+        description: "Branches to Clone (comma-separated)"
         required: true
-        type: string
 
 jobs:
   clone-repository:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Display Inputs
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create Repository
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          echo "Source Repo: ${{ github.event.inputs.source_repo_url }}"
-          echo "Target Repo: ${{ github.event.inputs.target_repo_name }}"
-          echo "Branch Count: ${{ github.event.inputs.branch_count }}"
-          echo "Branches: ${{ github.event.inputs.branch_names }}"
+          gh repo create "${{ github.event.inputs.target_repo_name }}" \
+            --private \
+            --confirm
 
       - name: Clone Source Repository
         run: |
-          git clone --mirror "${{ github.event.inputs.source_repo_url }}" source-repo.git
+          git clone --mirror "${{ github.event.inputs.source_repo_url }}" repo.git
 
-      - name: Show Selected Branches
+      - name: Push Selected Branches
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          echo "Selected branches:"
-          echo "${{ github.event.inputs.branch_names }}" | tr ',' '\n'
+          TARGET_URL="https://${GH_TOKEN}@github.com/${{ github.repository_owner }}/${{ github.event.inputs.target_repo_name }}.git"
 
-      - name: Repository Cloned Successfully
+          git clone "${{ github.event.inputs.source_repo_url }}" source
+          cd source
+
+          IFS=',' read -ra BRANCHES <<< "${{ github.event.inputs.branch_names }}"
+
+          git remote add target "$TARGET_URL"
+
+          for branch in "${BRANCHES[@]}"; do
+            git checkout "$branch"
+            git push target "$branch"
+          done
+
+      - name: Push Tags
         run: |
-          echo "Repository cloned successfully."
-          echo "No source repository settings, protection rules, or configurations were modified."
+          cd source
+          git push target --tags
